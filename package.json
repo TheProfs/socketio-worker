@@ -1,0 +1,21 @@
+{
+  "name": "socket.io-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 --experimental-test-coverage --test-coverage-exclude='**/socket.io.js' --test-coverage-exclude='test/utils/**' --test-timeout=15000 \"**/*.test.js\""
+  },
+  "imports": {
+    "#test/utils": "./test/utils/index.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "socket.io": "4.8.3"
+  },
+  "devDependencies": {
+    "jsdom": "^29.0.2"
+  }
+}
