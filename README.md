@@ -2,9 +2,8 @@
 
 [![test][testb]][test]
 
-socket.io off the main thread.  
-The worker owns the real Socket.IO client,
-while the page talks to `SocketIOWorker`.  
+socket.io running in a webworker.  
+ensures timers/heartbeat mechanisms work regardless.  
 
 ## Usage
 
@@ -45,7 +44,7 @@ Lifecycle listeners receive `(patch, message)`:
 - `patch` — connection snapshot (`connected`, `transport`, etc.)
 - `message.value` — cause for `connect_error` / `disconnect`
 
-> [!INFO]
+> [!NOTE]
 > - Use `set(path, value)` or `set(object)` for Socket.IO mutations.  
 >   Normal Socket.IO assignment is synchronous; worker-owned mutation must cross
 >   the proxy boundary.  
