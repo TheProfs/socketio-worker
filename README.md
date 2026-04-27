@@ -1,5 +1,7 @@
 # Socket.IO Worker
 
+[![test][testb]][test]
+
 socket.io off the main thread.  
 The worker owns the real Socket.IO client,
 while the page talks to `SocketIOWorker`.  
@@ -76,10 +78,13 @@ npm t
 
 ## Author
 
-[@TheProfs](https://github.com/TheProfs)
+[@TheProfs][author]
 
 ## License
 
 [MIT][mit]
 
+[testb]: https://github.com/TheProfs/socketio-worker/actions/workflows/test.yml/badge.svg
+[test]: https://github.com/TheProfs/socketio-worker/actions/workflows/test.yml
+[author]: https://github.com/TheProfs
 [mit]: https://opensource.org/licenses/MIT
