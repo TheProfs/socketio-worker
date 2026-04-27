@@ -147,8 +147,72 @@ return callMethod(manager, method, args)
   `t.beforeEach()`.  
 - You **MUST** keep leaf `t.test()` blocks assertion-focused.  
 - You **MUST** attach fixtures/results to `t`, not outer variables.  
-- You **MUST** use `partialDeepStrictEqual()` for snapshots and payload-shaped
-  values.  
+- You **MUST** use `partialDeepStrictEqual()` whenever possible.  
+  Snapshots, payload-shaped values, and any value with more than one field.  
+
+```js
+// ❌ scalar sprawl
+t.assert.strictEqual(snapshot.connected, true)
+t.assert.strictEqual(snapshot.transport, 'websocket')
+t.assert.strictEqual(snapshot.id, socket.id)
+
+// ✅ structural
+t.assert.partialDeepStrictEqual(snapshot, {
+  connected: true,
+  transport: 'websocket',
+  id: socket.id
+})
+```
+
+- You **MUST** keep assertions cohesive: one behavior claim per spec.  
+  Multiple assertions are fine when they prove the same claim.  
+  Split when the spec name can no longer cover every possible failure.  
+
+```js
+// ✅ cohesive — both assertions support "rejects with typed missing url error"
+await t.test('rejects with typed missing url error', async t => {
+  const error = await t.proxy.connect().catch(err => err)
+  t.assert.strictEqual(error.name, 'TypeError')
+  t.assert.match(error.message, /missing/i)
+})
+
+// ❌ mixed claims — name cannot describe a transport failure
+await t.test('proxy works', async t => {
+  t.assert.strictEqual(t.proxy.connected, true)
+  await t.assert.rejects(() => t.proxy.connect('bad'))
+  t.assert.strictEqual(t.proxy.transport, 'websocket')
+})
+```
+
+- You **MUST** match error/message keywords with regex, not exact strings.  
+  `/insufficient/i` over `'Insufficient funds in account'`.  
+
+```js
+// ❌ brittle — breaks on any rephrase
+t.assert.strictEqual(error.message, 'connect_error: forbidden')
+
+// ✅ keyword survives rephrasing
+t.assert.match(error.message, /forbidden/i)
+```
+
+- You **SHOULD** prefer `t.mock.fn()` / `t.mock.method()` over custom mocks.  
+  Reach for a custom mock only when the built-in API cannot express the seam.  
+
+```js
+// ✅ built-in spy
+t.beforeEach(t => {
+  t.onConnect = t.mock.fn()
+  t.proxy.on('connect', t.onConnect)
+})
+
+await t.test('fires connect once', t => {
+  t.assert.strictEqual(t.onConnect.mock.callCount(), 1)
+})
+
+// ❌ custom spy when t.mock.fn() would do
+let calls = 0
+t.proxy.on('connect', () => calls++)
+```
 
 Test fixture roles:
 
@@ -169,6 +233,45 @@ test/utils/worker.js   -> shared VM WorkerHost
 
 ### Test Utilities
 
+- You **MUST** use the `Fixture` class from `#test/utils` for proxy/element
+  setup. Bypassing it causes drift across test files.  
+
+```js
+// ✅ go through Fixture
+import { Fixture } from '#test/utils'
+t.beforeEach(t => {
+  t.fixture = new Fixture()
+  t.Proxy = t.fixture.load()
+  t.proxy = new t.Proxy({ src, lib })
+})
+
+// ❌ bypassing — forks setup across files
+t.beforeEach(t => {
+  const ctx = vm.createContext({ ... })
+  vm.runInContext(workerSrc, ctx)
+  t.proxy = ctx.SocketIOWorker
+})
+```
+
+- You **MUST NOT** add methods, properties, or options to `Fixture` without
+  explicit user approval. Every addition becomes a contract every test
+  depends on. Compose around it instead.  
+
+```js
+// ❌ growing Fixture for one test's need
+class Fixture {
+  loadWithAuth(token) { /* ... */ }   // do not add
+  withMockServer()    { /* ... */ }   // do not add
+}
+
+// ✅ compose at the call site
+t.beforeEach(t => {
+  t.fixture = new Fixture()
+  t.Proxy = t.fixture.load()
+  t.proxy = new t.Proxy({ src, lib })
+  t.proxy.set({ auth: { token: 'ok' } })
+})
+```
 - You **MUST** use existing `#test/utils` fixtures before adding a helper.  
 - You **MUST NOT** add tests that target `test/utils` directly.  
   Cover utility behavior through the owning feature tests.  
@@ -319,3 +422,47 @@ Problems:
 - Arrange, act, assertions, and teardown are mixed.  
 - Multiple behavior claims are packed into one test.  
 - Snapshot-shaped values use scalar assertion sprawl.  
+
+## Review
+
+Run before declaring work done.  
+
+**Scope:**
+
+- No app-specific events, auth schemes, routes, or reconnect policy.  
+- `lib` URL passed explicitly; no script tag inspection.  
+- Socket.IO terminology preserved; `proxy:*` stays bridge-internal.  
+
+**Runtime:**
+
+- Payloads cross the worker boundary as JSON-safe values only.  
+- Worker-owned mutation goes through `set(path, value)` / `set(object)`.  
+- Errors surface with name, message, stack — never swallowed.  
+- Timed-out `connect()` does not leave a late visible connection.  
+- Bridge listeners survive `offAny()` / `removeAllListeners()`.  
+
+**Code:**
+
+- Expressions over statements; no intermediates without cause.  
+- Concise arrows, implicit return, `?.` / `??` over stacked guards.  
+- Functional array methods over manual loops where readable.  
+- No dead files, stale exports, or drift between code and docs.  
+
+**Tests:**
+
+- `node --test --test-concurrency=1` passes clean.  
+- Shape: `subject -> #method -> context -> behavior`.  
+- Arrange + act in the nearest owning `t.beforeEach()`.  
+- Leaf `t.test()` blocks are assertion-focused.  
+- Fixtures attached to `t`; no outer variables; no `t` into helpers.  
+- `partialDeepStrictEqual()` on every multi-field value.  
+- One behavior claim per spec; regex match for error messages.  
+- `t.mock.fn()` over custom spies.  
+- `t.afterEach`: `disconnect().catch()` → `terminate()` → `fixture.close()`
+  → `server.close()`.  
+
+**Docs:**
+
+- README covers public surface only.  
+- `proxy:*` events not documented as public API.  
+- AGENTS.md changes match the rule they describe.  
